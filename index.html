@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Run Tracker</title>
+  <link rel="preconnect" href="https://fonts.gstatic.com/" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?display=swap&family=Noto+Sans:wght@400;500;700;900&family=Plus+Jakarta+Sans:wght@400;500;700;800" as="style" onload="this.rel='stylesheet'">
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <link rel="stylesheet" href="style.css">
+  <style type="text/tailwindcss">
+    :root {
+      --primary-color: #ea2a33;
+    }
+  </style>
+</head>
+<body class="bg-gray-50">
+  <div id="app" class="relative flex size-full min-h-screen flex-col justify-between group/design-root overflow-x-hidden" style='font-family: "Plus Jakarta Sans", "Noto Sans", sans-serif;'>
+    <div id="ai-coach-view">
+      <header class="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
+        <div class="flex items-center p-4 pb-2 justify-between">
+          <h1 class="text-gray-900 text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">AI Coach</h1>
+        </div>
+      </header>
+      <main class="p-4 space-y-6 pb-24">
+        <div id="summary-welcome" class="bg-white rounded-xl shadow-sm p-4">
+          <p class="text-gray-900 text-lg font-bold leading-tight">Welcome!</p>
+          <p class="text-gray-600 text-sm font-normal leading-normal mt-2">
+            Click 'Live Run' to start your first run. Your summary and AI-powered advice will appear here when you're done.
+          </p>
+        </div>
+
+        <div id="summary-main" class="hidden space-y-6">
+            <div class="bg-white rounded-xl shadow-sm p-4">
+              <p class="text-[var(--primary-color)] text-xs font-semibold uppercase tracking-wider">Personalized Advice</p>
+              <p id="ai-advice-title" class="text-gray-900 text-lg font-bold leading-tight mt-1">Great job on your last run!</p>
+              <p id="ai-advice-body" class="text-gray-600 text-sm font-normal leading-normal mt-2">
+                You've shown amazing consistency. Let's see how you can push your limits and achieve new personal bests.
+              </p>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm">
+              <div class="p-4">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <p class="text-gray-900 text-lg font-bold leading-tight">Compare with Past Performance</p>
+                    <p class="text-gray-500 text-sm">See how your last run stacks up.</p>
+                  </div>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-4 text-center">
+                  <div>
+                    <p class="text-xs text-gray-500 uppercase">Last Run</p>
+                    <p id="summary-last-dist" class="text-2xl font-bold text-gray-900">0.0<span class="text-sm font-medium">km</span></p>
+                    <p id="summary-last-time" class="text-sm text-gray-600">0:00 min</p>
+                  </div>
+                  <div>
+                    <p class="text-xs text-gray-500 uppercase">Previous Best</p>
+                    <p id="summary-best-dist" class="text-2xl font-bold text-gray-900">0.0<span class="text-sm font-medium">km</span></p>
+                    <p id="summary-best-time" class="text-sm text-gray-600">0:00 min</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+        </div>
+
+        <div>
+          <h2 class="text-gray-900 text-xl font-bold leading-tight tracking-tight px-4 pb-3">Settings</h2>
+           <div class="bg-white rounded-xl shadow-sm p-4">
+              <label for="gemini-key" class="block text-sm font-medium text-gray-700">Gemini API Key</label>
+              <div class="mt-1 flex gap-2">
+                <input type="password" id="gemini-key" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Enter your API key">
+                <button id="save-key-button" class="rounded-md bg-[var(--primary-color)] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500">Save</button>
+              </div>
+           </div>
+        </div>
+      </main>
+    </div>
+
+    <div id="live-run-view" class="hidden">
+      <header class="sticky top-0 z-10 bg-gray-50/80 backdrop-blur-sm">
+        <div class="flex items-center p-4 justify-between">
+          <button id="close-live-run" class="flex size-10 shrink-0 items-center justify-center rounded-full text-gray-700 hover:bg-gray-200">
+            <span class="material-symbols-outlined text-2xl"> close </span>
+          </button>
+          <h1 class="text-gray-900 text-lg font-bold leading-tight tracking-tight">Live Run</h1>
+          <div class="size-10"></div>
+        </div>
+      </header>
+      <main class="flex-1 flex flex-col justify-center">
+        <div class="px-4 py-8 text-center">
+          <p class="text-gray-500 text-sm font-medium uppercase tracking-wider">Distance</p>
+          <p id="live-distance" class="text-gray-900 text-8xl font-bold tracking-tighter mt-1">0.0<span class="text-5xl ml-1">km</span></p>
+        </div>
+        <div class="grid grid-cols-2 gap-4 px-4">
+          <div class="flex flex-col items-center justify-center rounded-2xl p-6 bg-gray-100">
+            <p class="text-gray-500 text-sm font-medium uppercase tracking-wider">Pace</p>
+            <p id="live-pace" class="text-gray-900 tracking-tight text-3xl font-bold mt-1">0:00 <span class="text-lg font-medium text-gray-600">/km</span></p>
+          </div>
+          <div class="flex flex-col items-center justify-center rounded-2xl p-6 bg-gray-100">
+            <p class="text-gray-500 text-sm font-medium uppercase tracking-wider">Time</p>
+            <p id="live-time" class="text-gray-900 tracking-tight text-3xl font-bold mt-1">00:00</p>
+          </div>
+        </div>
+        <div class="px-4 py-6">
+          <canvas id="live-map" class="w-full aspect-video bg-gray-200 rounded-2xl"></canvas>
+        </div>
+      </main>
+      <footer class="sticky bottom-0 bg-gray-50/80 backdrop-blur-sm pb-4 px-4 pt-4">
+        <div class="flex items-center gap-4">
+          <button id="pause-button" class="flex flex-1 items-center justify-center rounded-full h-16 bg-[var(--primary-color)] text-white text-lg font-bold shadow-lg shadow-red-500/30">
+            <span class="material-symbols-outlined mr-2"> pause </span>
+            <span>Pause</span>
+          </button>
+          <button id="finish-button" class="flex flex-1 items-center justify-center rounded-full h-16 bg-gray-200 text-gray-800 text-lg font-bold">
+            <span class="material-symbols-outlined mr-2"> flag </span>
+            <span>Finish</span>
+          </button>
+        </div>
+      </footer>
+    </div>
+
+    <div id="history-view" class="hidden">
+      <header class="sticky top-0 bg-gray-50/80 backdrop-blur-sm z-10">
+        <div class="flex items-center p-4 pb-2 justify-between">
+          <h1 class="text-gray-900 text-lg font-bold leading-tight tracking-[-0.015em] flex-1 text-center">History</h1>
+        </div>
+      </header>
+      <main id="history-list" class="p-4 space-y-4">
+        <!-- History items will be injected here -->
+        <div class="bg-white rounded-xl shadow-sm p-4">
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="text-gray-900 font-semibold">Mon, Sep 09 2024</p>
+              <p class="text-gray-600 text-sm">5.2 km in 28:34</p>
+            </div>
+            <canvas class="w-24 h-16 bg-gray-100 rounded-lg"></canvas>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <footer class="sticky bottom-0 bg-gray-50/80 backdrop-blur-sm">
+      <nav class="flex justify-around border-t border-gray-200 px-4 py-2">
+        <a id="nav-live-run" class="flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-[var(--primary-color)] transition-colors w-24" href="#">
+          <svg fill="currentColor" height="24px" viewBox="0 0 256 256" width="24px" xmlns="http://www.w3.org/2000/svg"><path d="M128,24A104,104,0,1,0,232,128,104.11,104.11,0,0,0,128,24Zm0,192a88,88,0,1,1,88-88A88.1,88.1,0,0,1,128,216Zm36.44-94.66-48-32A8,8,0,0,0,104,96v64a8,8,0,0,0,12.44,6.66l48-32a8,8,0,0,0,0-13.32ZM120,145.05V111l25.58,17Z"></path></svg>
+          <p class="text-xs font-medium leading-normal tracking-[0.015em]">Live Run</p>
+        </a>
+        <a id="nav-summary" class="flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-[var(--primary-color)] transition-colors w-24" href="#">
+          <svg fill="currentColor" height="24px" viewBox="0 0 256 256" width="24px" xmlns="http://www.w3.org/2000/svg"><path d="M232,208a8,8,0,0,1-8,8H32a8,8,0,0,1-8-8V48a8,8,0,0,1,16,0v94.37L90.73,98a8,8,0,0,1,10.07-.38l58.81,44.11L218.73,90a8,8,0,1,1,10.54,12l-64,56a8,8,0,0,1-10.07.38L96.39,114.29,40,163.63V200H224A8,8,0,0,1,232,208Z"></path></svg>
+          <p class="text-xs font-medium leading-normal tracking-[0.015em]">Summary</p>
+        </a>
+        <a id="nav-history" class="flex flex-col items-center justify-center gap-1 text-gray-500 hover:text-[var(--primary-color)] transition-colors w-24" href="#">
+           <svg fill="currentColor" height="24px" viewBox="0 0 256 256" width="24px" xmlns="http://www.w3.org/2000/svg"><path d="M200,48H136V16a8,8,0,0,0-16,0V48H56A32,32,0,0,0,24,80V192a32,32,0,0,0,32,32H200a32,32,0,0,0,32-32V80A32,32,0,0,0,200,48ZM172,96a12,12,0,1,1-12,12A12,12,0,0,1,172,96ZM96,184H80a16,16,0,0,1,0-32H96ZM84,120a12,12,0,1,1,12-12A12,12,0,0,1,84,120Zm60,64H112V152h32Zm32,0H160V152h16a16,16,0,0,1,0,32Z"></path></svg>
+          <p class="text-xs font-bold leading-normal tracking-[0.015em]">History</p>
+        </a>
+      </nav>
+    </footer>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
