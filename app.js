@@ -29,6 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const summaryBestTimeEl = document.getElementById('summary-best-time');
     const aiAdviceTitleEl = document.getElementById('ai-advice-title');
     const aiAdviceBodyEl = document.getElementById('ai-advice-body');
+    const liveMapCanvas = document.getElementById('live-map');
+    const summaryMapCanvas = document.getElementById('summary-map');
 
     // --- STATE ---
     let runState = {};
@@ -75,6 +77,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         runState = { isRunning: true, isPaused: false, startTime: Date.now(), elapsedTime: 0, locations: [], distance: 0, watchId: null, timerId: null, gpsStatus: 'Initializing...' };
         updateGpsStatus('Initializing...', '');
+
+        // Clear the canvas
+        const ctx = liveMapCanvas.getContext('2d');
+        ctx.clearRect(0, 0, liveMapCanvas.width, liveMapCanvas.height);
 
         runState.watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleError, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         runState.timerId = setInterval(updateTimer, 1000);
@@ -135,6 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         runState.locations.push(newLocation);
+        drawRoute(liveMapCanvas, runState.locations);
         updateUI();
     };
     const handleError = (error) => {
@@ -256,6 +263,8 @@ document.addEventListener('DOMContentLoaded', () => {
             summaryLastTimeEl.textContent = formatTime(lastRun.duration);
             summaryBestDistEl.innerHTML = `${formatDistance(bestRun.distance)}<span class="text-sm font-medium">km</span>`;
             summaryBestTimeEl.textContent = formatTime(bestRun.duration);
+
+            drawRoute(summaryMapCanvas, lastRun.locations);
 
             // Placeholder for AI advice
             getAIAdvice(lastRun);
