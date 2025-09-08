@@ -1,4 +1,4 @@
 /* Custom styles will go here */
 body {
-  min-height: max(884px, 100dvh);
+  min-height: 100dvh;
 }
