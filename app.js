@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const liveTimeEl = document.getElementById('live-time');
     const pauseButton = document.getElementById('pause-button');
     const finishButton = document.getElementById('finish-button');
+    const gpsStatusTextEl = document.getElementById('gps-status-text');
+    const gpsAccuracyTextEl = document.getElementById('gps-accuracy-text');
     const historyListEl = document.getElementById('history-list');
     const geminiKeyInput = document.getElementById('gemini-key');
     const saveKeyButton = document.getElementById('save-key-button');
@@ -71,7 +73,9 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Geolocation is not supported by your browser.");
             return;
         }
-        runState = { isRunning: true, isPaused: false, startTime: Date.now(), elapsedTime: 0, locations: [], distance: 0, watchId: null, timerId: null };
+        runState = { isRunning: true, isPaused: false, startTime: Date.now(), elapsedTime: 0, locations: [], distance: 0, watchId: null, timerId: null, gpsStatus: 'Initializing...' };
+        updateGpsStatus('Initializing...', '');
+
         runState.watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleError, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         runState.timerId = setInterval(updateTimer, 1000);
         updateUI();
@@ -98,14 +102,27 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const updateTimer = () => { if (!runState.isPaused) { runState.elapsedTime = Date.now() - runState.startTime; updateUI(); } };
+
+    const updateGpsStatus = (status, accuracy) => {
+        gpsStatusTextEl.textContent = status;
+        if (accuracy) {
+            gpsAccuracyTextEl.textContent = `Accuracy: ${accuracy.toFixed(1)}m`;
+        } else {
+            gpsAccuracyTextEl.textContent = '';
+        }
+    };
+
     const handleLocationUpdate = (position) => {
         if (runState.isPaused) return;
 
         const { latitude, longitude, timestamp, accuracy } = position.coords;
 
+        updateGpsStatus('Active', accuracy);
+
         // We filter out readings that are too inaccurate
         if (accuracy > 30) {
             console.log(`Skipping location update due to low accuracy: ${accuracy}m`);
+            updateGpsStatus('Poor signal. Accuracy too low.', accuracy);
             return;
         }
 
@@ -123,17 +140,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleError = (error) => {
         console.error("Geolocation error: ", error);
         let message = "Could not get location. Please ensure location services are enabled and permissions are granted.";
+        let status = "Error";
         switch (error.code) {
             case error.PERMISSION_DENIED:
-                message = "Location permission denied. Please enable location services in your browser settings.";
+                status = "Permission Denied";
+                message = "Location permission denied. To fix this, go to your browser's settings, find this site, and allow location access.";
                 break;
             case error.POSITION_UNAVAILABLE:
-                message = "Location information is unavailable. This might be due to a weak GPS signal.";
+                status = "Location Unavailable";
+                message = "Location information is unavailable. This might be due to a weak GPS signal. Try moving to an open area.";
                 break;
             case error.TIMEOUT:
+                status = "Request Timed Out";
                 message = "The request to get user location timed out. Please try again with a stronger signal.";
                 break;
         }
+        updateGpsStatus(status, null);
         alert(message);
         stopRun(false);
         showView('aiCoach');
