@@ -67,8 +67,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LIVE RUN ---
     const startRun = () => {
+        if (!navigator.geolocation) {
+            alert("Geolocation is not supported by your browser.");
+            return;
+        }
         runState = { isRunning: true, isPaused: false, startTime: Date.now(), elapsedTime: 0, locations: [], distance: 0, watchId: null, timerId: null };
-        runState.watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleError, { enableHighAccuracy: true });
+        runState.watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleError, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         runState.timerId = setInterval(updateTimer, 1000);
         updateUI();
     };
@@ -96,23 +100,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const updateTimer = () => { if (!runState.isPaused) { runState.elapsedTime = Date.now() - runState.startTime; updateUI(); } };
     const handleLocationUpdate = (position) => {
         if (runState.isPaused) return;
-        const { latitude, longitude, timestamp } = position.coords;
+
+        const { latitude, longitude, timestamp, accuracy } = position.coords;
+
+        // We filter out readings that are too inaccurate
+        if (accuracy > 30) {
+            console.log(`Skipping location update due to low accuracy: ${accuracy}m`);
+            return;
+        }
+
         const newLocation = { latitude, longitude, timestamp };
 
         if (runState.locations.length > 0) {
             const lastLocation = runState.locations[runState.locations.length - 1];
             const distanceDelta = calculateDistance(lastLocation, newLocation);
-            const timeDelta = (newLocation.timestamp - lastLocation.timestamp) / 1000;
-            if (timeDelta > 0) {
-                const speedKph = (distanceDelta / timeDelta) * 3.6;
-                if (speedKph < 50) { runState.distance += distanceDelta; runState.locations.push(newLocation); }
-            }
-        } else {
-            runState.locations.push(newLocation);
+            runState.distance += distanceDelta;
         }
+
+        runState.locations.push(newLocation);
         updateUI();
     };
-    const handleError = (error) => { console.error("Geolocation error: ", error); alert("Could not get location."); stopRun(false); };
+    const handleError = (error) => {
+        console.error("Geolocation error: ", error);
+        let message = "Could not get location. Please ensure location services are enabled and permissions are granted.";
+        switch (error.code) {
+            case error.PERMISSION_DENIED:
+                message = "Location permission denied. Please enable location services in your browser settings.";
+                break;
+            case error.POSITION_UNAVAILABLE:
+                message = "Location information is unavailable. This might be due to a weak GPS signal.";
+                break;
+            case error.TIMEOUT:
+                message = "The request to get user location timed out. Please try again with a stronger signal.";
+                break;
+        }
+        alert(message);
+        stopRun(false);
+        showView('aiCoach');
+    };
     const updateUI = () => {
         if (!runState.isRunning) return;
         const totalSeconds = Math.floor(runState.elapsedTime / 1000);
@@ -141,13 +166,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- DATA & HISTORY ---
     const saveRun = () => {
-        const runData = { date: new Date().toISOString(), distance: runState.distance, duration: runState.elapsedTime, locations: runState.locations };
-        allRuns.push(runData);
-        localStorage.setItem('runs', JSON.stringify(allRuns));
+        try {
+            const runData = { date: new Date().toISOString(), distance: runState.distance, duration: runState.elapsedTime, locations: runState.locations };
+            allRuns.push(runData);
+            localStorage.setItem('runs', JSON.stringify(allRuns));
+        } catch (e) {
+            console.error("Failed to save run:", e);
+            alert("Could not save your run. Local storage might be full or disabled.");
+        }
     };
     const loadRuns = () => {
-        const runsJSON = localStorage.getItem('runs');
-        allRuns = runsJSON ? JSON.parse(runsJSON) : [];
+        try {
+            const runsJSON = localStorage.getItem('runs');
+            if (runsJSON) {
+                allRuns = JSON.parse(runsJSON);
+            }
+        } catch (e) {
+            console.error("Failed to load runs:", e);
+            allRuns = [];
+            alert("Could not load your run history. Local storage might be disabled.");
+        }
     };
     const renderHistory = () => {
         historyListEl.innerHTML = '';
@@ -223,15 +261,25 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveApiKey = () => {
         geminiKey = geminiKeyInput.value;
         if (geminiKey) {
-            localStorage.setItem('geminiApiKey', geminiKey);
-            alert('API Key saved!');
+            try {
+                localStorage.setItem('geminiApiKey', geminiKey);
+                alert('API Key saved!');
+            } catch (e) {
+                console.error("Failed to save API key:", e);
+                alert("Could not save API key. Local storage might be full or disabled.");
+            }
         }
     };
     const loadApiKey = () => {
-        const savedKey = localStorage.getItem('geminiApiKey');
-        if (savedKey) {
-            geminiKey = savedKey;
-            geminiKeyInput.value = savedKey;
+        try {
+            const savedKey = localStorage.getItem('geminiApiKey');
+            if (savedKey) {
+                geminiKey = savedKey;
+                geminiKeyInput.value = savedKey;
+            }
+        } catch (e) {
+            console.error("Failed to load API key:", e);
+            alert("Could not load API key. Local storage might be disabled.");
         }
     };
 
