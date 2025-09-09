@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
         views[viewName].classList.remove('hidden');
     };
 
-    navLinks.liveRun.addEventListener('click', (e) => { e.preventDefault(); startRun(); showView('liveRun'); });
+    navLinks.liveRun.addEventListener('click', (e) => { e.preventDefault(); showView('liveRun'); startDemoRun(); });
     navLinks.summary.addEventListener('click', (e) => { e.preventDefault(); showView('aiCoach'); });
     navLinks.history.addEventListener('click', (e) => { e.preventDefault(); renderHistory(); showView('history'); });
     closeLiveRunButton.addEventListener('click', () => {
@@ -70,6 +70,89 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- LIVE RUN ---
+    const startDemoRun = () => {
+        // --- DEMO MOCK DATA ---
+        const route = [
+          { latitude: 34.0522, longitude: -118.2437 },
+          { latitude: 34.0525, longitude: -118.2445 },
+          { latitude: 34.0528, longitude: -118.2453 },
+          { latitude: 34.0531, longitude: -118.2461 },
+          { latitude: 34.0534, longitude: -118.2469 },
+          { latitude: 34.0537, longitude: -118.2477 },
+          { latitude: 34.0540, longitude: -118.2485 },
+          { latitude: 34.0543, longitude: -118.2493 },
+          { latitude: 34.0546, longitude: -118.2501 },
+          { latitude: 34.0549, longitude: -118.2509 },
+          { latitude: 34.0552, longitude: -118.2517 },
+          { latitude: 34.0555, longitude: -118.2525 },
+          { latitude: 34.0558, longitude: -118.2533 },
+          { latitude: 34.0561, longitude: -118.2541 },
+          { latitude: 34.0564, longitude: -118.2549 },
+          { latitude: 34.0567, longitude: -118.2557 },
+          { latitude: 34.0570, longitude: -118.2565 },
+          { latitude: 34.0573, longitude: -118.2573 },
+          { latitude: 34.0576, longitude: -118.2581 },
+          { latitude: 34.0579, longitude: -118.2589 },
+        ];
+
+        // Pace: 9:32/mile is ~5:55/km.
+        // 5k at 5:55/km is 29m 35s.
+        // Let's start at 1.5km.
+        // Time = 1.5km * 5.916 min/km = 8.874 mins = 8m 52.44s
+        const initialDistance = 1500; // meters
+        const initialTime = 532 * 1000; // 8m 52s in ms
+        const pointsToSkip = 6; // Start at 1.5km, which is 30% of 5k. 30% of 20 points is 6.
+
+        runState = {
+            isRunning: true,
+            isPaused: false,
+            startTime: Date.now() - initialTime,
+            elapsedTime: initialTime,
+            locations: route.slice(0, pointsToSkip),
+            distance: initialDistance,
+            watchId: null, // This will be our timer
+            timerId: null,
+            gpsStatus: 'Active'
+        };
+
+        updateGpsStatus('Demo Run in Progress', 'Perfect');
+        const ctx = liveMapCanvas.getContext('2d');
+        ctx.clearRect(0, 0, liveMapCanvas.width, liveMapCanvas.height);
+        drawRoute(liveMapCanvas, runState.locations);
+        updateUI(runState);
+
+        let currentIndex = pointsToSkip;
+
+        const tick = () => {
+            if (currentIndex >= route.length || runState.isPaused) {
+                if (currentIndex >= route.length) {
+                    stopRun(false); // end demo
+                }
+                return;
+            }
+
+            const newLocation = route[currentIndex];
+            const lastLocation = runState.locations[runState.locations.length - 1];
+            const distanceDelta = calculateDistance(lastLocation, newLocation);
+
+            runState.distance += distanceDelta;
+            runState.locations.push(newLocation);
+
+            // Update time based on distance and pace
+            // Pace = 5.916 min/km = 0.005916 min/m = 0.355 s/m
+            runState.elapsedTime += distanceDelta * 0.355 * 1000;
+            runState.startTime = Date.now() - runState.elapsedTime;
+
+            drawRoute(liveMapCanvas, runState.locations);
+            updateUI(runState);
+
+            currentIndex++;
+        };
+
+        runState.watchId = setInterval(tick, 2500); // Add a point every 2.5 seconds
+        runState.timerId = setInterval(updateTimer, 1000);
+    };
+
     const startRun = () => {
         if (!navigator.geolocation) {
             alert("Geolocation is not supported by your browser.");
@@ -84,7 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         runState.watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleError, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         runState.timerId = setInterval(updateTimer, 1000);
-        updateUI();
+        updateUI(runState);
     };
 
     const stopRun = (shouldSave) => {
@@ -104,10 +187,10 @@ document.addEventListener('DOMContentLoaded', () => {
             runState.startTime = Date.now() - runState.elapsedTime;
             runState.timerId = setInterval(updateTimer, 1000);
         }
-        updateUI();
+        updateUI(runState);
     };
 
-    const updateTimer = () => { if (!runState.isPaused) { runState.elapsedTime = Date.now() - runState.startTime; updateUI(); } };
+    const updateTimer = () => { if (!runState.isPaused) { runState.elapsedTime = Date.now() - runState.startTime; updateUI(runState); } };
 
     const updateGpsStatus = (status, accuracy) => {
         gpsStatusTextEl.textContent = status;
@@ -142,7 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         runState.locations.push(newLocation);
         drawRoute(liveMapCanvas, runState.locations);
-        updateUI();
+        updateUI(runState);
     };
     const handleError = (error) => {
         console.error("Geolocation error: ", error);
@@ -167,22 +250,22 @@ document.addEventListener('DOMContentLoaded', () => {
         stopRun(false);
         showView('aiCoach');
     };
-    const updateUI = () => {
-        if (!runState.isRunning) return;
-        const totalSeconds = Math.floor(runState.elapsedTime / 1000);
+    const updateUI = (state) => {
+        if (!state.isRunning) return;
+        const totalSeconds = Math.floor(state.elapsedTime / 1000);
         const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
         const seconds = (totalSeconds % 60).toString().padStart(2, '0');
         liveTimeEl.textContent = `${minutes}:${seconds}`;
-        liveDistanceEl.innerHTML = `${(runState.distance / 1000).toFixed(2)}<span class="text-5xl ml-1">km</span>`;
-        if (runState.distance > 0) {
-            const pace = (runState.elapsedTime / 1000 / 60) / (runState.distance / 1000);
+        liveDistanceEl.innerHTML = `${(state.distance / 1000).toFixed(2)}<span class="text-5xl ml-1">km</span>`;
+        if (state.distance > 0) {
+            const pace = (state.elapsedTime / 1000 / 60) / (state.distance / 1000);
             livePaceEl.innerHTML = `${Math.floor(pace)}:${Math.round((pace % 1) * 60).toString().padStart(2, '0')} <span class="text-lg font-medium text-gray-600">/km</span>`;
         } else {
             livePaceEl.innerHTML = `0:00 <span class="text-lg font-medium text-gray-600">/km</span>`;
         }
         const [pauseIcon, pauseText] = [pauseButton.children[0], pauseButton.children[1]];
-        pauseIcon.textContent = runState.isPaused ? 'play_arrow' : 'pause';
-        pauseText.textContent = runState.isPaused ? 'Resume' : 'Pause';
+        pauseIcon.textContent = state.isPaused ? 'play_arrow' : 'pause';
+        pauseText.textContent = state.isPaused ? 'Resume' : 'Pause';
     };
     const calculateDistance = (loc1, loc2) => {
         const R = 6371e3;
@@ -230,9 +313,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const drawRoute = (canvas, locations) => {
         if (!canvas || locations.length < 2) return;
         const ctx = canvas.getContext('2d'), { width, height } = canvas;
+        if (width === 0 || height === 0) return; // Prevent drawing on a hidden or zero-sized canvas
+
         const lats = locations.map(l => l.latitude), lons = locations.map(l => l.longitude);
         const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLon = Math.min(...lons), maxLon = Math.max(...lons);
         const latRange = maxLat - minLat, lonRange = maxLon - minLon;
+
+        if (latRange === 0 || lonRange === 0) return; // Avoid division by zero
+
         const scale = Math.min(width / lonRange, height / latRange) * 0.9;
         const xOffset = (width - lonRange * scale) / 2, yOffset = (height - latRange * scale) / 2;
         ctx.clearRect(0, 0, width, height);
