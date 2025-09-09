@@ -186,7 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const updateGpsStatus = (status, accuracy) => {
         gpsStatusTextEl.textContent = status;
-        gpsAccuracyTextEl.textContent = accuracy ? `Accuracy: ${accuracy.toFixed(1)}m` : '';
+        gpsAccuracyTextEl.textContent = accuracy ? `Accuracy: ${typeof accuracy === 'number' ? accuracy.toFixed(1) + 'm' : accuracy}` : '';
     };
 
     const handleLocationUpdate = (position) => {
