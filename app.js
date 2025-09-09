@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const seconds = totalSeconds % 60;
         return `${minutes}m ${seconds}s`;
     };
-    const formatDistance = (meters) => `${(meters / 1000).toFixed(2)}km`;
+    const formatDistance = (meters) => `${(meters / 1609.34).toFixed(2)}mi`;
 
     // --- NAVIGATION ---
     const showView = (viewName) => {
@@ -55,7 +55,7 @@ document.addEventListener('DOMContentLoaded', () => {
         views[viewName].classList.remove('hidden');
     };
 
-    navLinks.liveRun.addEventListener('click', (e) => { e.preventDefault(); startRun(); showView('liveRun'); });
+    navLinks.liveRun.addEventListener('click', (e) => { e.preventDefault(); showView('liveRun'); startDemoRun(); });
     navLinks.summary.addEventListener('click', (e) => { e.preventDefault(); showView('aiCoach'); });
     navLinks.history.addEventListener('click', (e) => { e.preventDefault(); renderHistory(); showView('history'); });
     closeLiveRunButton.addEventListener('click', () => {
@@ -70,6 +70,84 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- LIVE RUN ---
+    const startDemoRun = () => {
+        // --- DEMO MOCK DATA ---
+        const route = [
+          { latitude: 34.0522, longitude: -118.2437 },
+          { latitude: 34.0525, longitude: -118.2445 },
+          { latitude: 34.0528, longitude: -118.2453 },
+          { latitude: 34.0531, longitude: -118.2461 },
+          { latitude: 34.0534, longitude: -118.2469 },
+          { latitude: 34.0537, longitude: -118.2477 },
+          { latitude: 34.0540, longitude: -118.2485 },
+          { latitude: 34.0543, longitude: -118.2493 },
+          { latitude: 34.0546, longitude: -118.2501 },
+          { latitude: 34.0549, longitude: -118.2509 },
+          { latitude: 34.0552, longitude: -118.2517 },
+          { latitude: 34.0555, longitude: -118.2525 },
+          { latitude: 34.0558, longitude: -118.2533 },
+          { latitude: 34.0561, longitude: -118.2541 },
+          { latitude: 34.0564, longitude: -118.2549 },
+          { latitude: 34.0567, longitude: -118.2557 },
+          { latitude: 34.0570, longitude: -118.2565 },
+          { latitude: 34.0573, longitude: -118.2573 },
+          { latitude: 34.0576, longitude: -118.2581 },
+          { latitude: 34.0579, longitude: -118.2589 },
+        ];
+
+        // Pace: 9:32/mile
+        // 1.5km is ~0.93 miles. Time for 0.93 miles at 9:32 pace is 8m 52s.
+        const initialDistance = 1500; // meters
+        const initialTime = 532 * 1000; // 8m 52s in ms
+        const pointsToSkip = 6;
+
+        runState = {
+            isRunning: true,
+            isPaused: false,
+            startTime: Date.now() - initialTime,
+            elapsedTime: initialTime,
+            locations: route.slice(0, pointsToSkip),
+            distance: initialDistance,
+            watchId: null,
+            timerId: null,
+            gpsStatus: 'Active'
+        };
+
+        updateGpsStatus('Demo Run in Progress', 'Perfect');
+        const ctx = liveMapCanvas.getContext('2d');
+        ctx.clearRect(0, 0, liveMapCanvas.width, liveMapCanvas.height);
+        drawRoute(liveMapCanvas, runState.locations);
+        updateUI();
+
+        let currentIndex = pointsToSkip;
+
+        const tick = () => {
+            if (currentIndex >= route.length || runState.isPaused) {
+                if (currentIndex >= route.length) stopRun(false);
+                return;
+            }
+
+            const newLocation = route[currentIndex];
+            const lastLocation = runState.locations[runState.locations.length - 1];
+            const distanceDelta = calculateDistance(lastLocation, newLocation);
+
+            runState.distance += distanceDelta;
+            runState.locations.push(newLocation);
+
+            // Pace: 9:32/mile = 572s/mile. 1 mile = 1609.34m. Pace = 0.3554 s/m
+            runState.elapsedTime += distanceDelta * 0.3554 * 1000;
+            runState.startTime = Date.now() - runState.elapsedTime;
+
+            drawRoute(liveMapCanvas, runState.locations);
+            updateUI();
+
+            currentIndex++;
+        };
+
+        runState.watchId = setInterval(tick, 2500);
+        runState.timerId = setInterval(updateTimer, 1000);
+    };
+
     const startRun = () => {
         if (!navigator.geolocation) {
             alert("Geolocation is not supported by your browser.");
@@ -77,21 +155,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         runState = { isRunning: true, isPaused: false, startTime: Date.now(), elapsedTime: 0, locations: [], distance: 0, watchId: null, timerId: null, gpsStatus: 'Initializing...' };
         updateGpsStatus('Initializing...', '');
-
-        // Clear the canvas
         const ctx = liveMapCanvas.getContext('2d');
         ctx.clearRect(0, 0, liveMapCanvas.width, liveMapCanvas.height);
-
         runState.watchId = navigator.geolocation.watchPosition(handleLocationUpdate, handleError, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
         runState.timerId = setInterval(updateTimer, 1000);
         updateUI();
     };
 
     const stopRun = (shouldSave) => {
-        if (runState.watchId) navigator.geolocation.clearWatch(runState.watchId);
+        if (runState.watchId) clearInterval(runState.watchId);
         if (runState.timerId) clearInterval(runState.timerId);
         runState.isRunning = false;
-        if (shouldSave && runState.distance > 10) { // Only save runs longer than 10m
+        if (shouldSave && runState.distance > 10) {
             saveRun();
         }
     };
@@ -111,79 +186,63 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const updateGpsStatus = (status, accuracy) => {
         gpsStatusTextEl.textContent = status;
-        if (accuracy) {
-            gpsAccuracyTextEl.textContent = `Accuracy: ${accuracy.toFixed(1)}m`;
-        } else {
-            gpsAccuracyTextEl.textContent = '';
-        }
+        gpsAccuracyTextEl.textContent = accuracy ? `Accuracy: ${accuracy.toFixed(1)}m` : '';
     };
 
     const handleLocationUpdate = (position) => {
         if (runState.isPaused) return;
-
         const { latitude, longitude, timestamp, accuracy } = position.coords;
-
         updateGpsStatus('Active', accuracy);
 
-        // We filter out readings that are too inaccurate
         if (accuracy > 30) {
-            console.log(`Skipping location update due to low accuracy: ${accuracy}m`);
             updateGpsStatus('Poor signal. Accuracy too low.', accuracy);
             return;
         }
 
         const newLocation = { latitude, longitude, timestamp };
-
         if (runState.locations.length > 0) {
             const lastLocation = runState.locations[runState.locations.length - 1];
-            const distanceDelta = calculateDistance(lastLocation, newLocation);
-            runState.distance += distanceDelta;
+            runState.distance += calculateDistance(lastLocation, newLocation);
         }
-
         runState.locations.push(newLocation);
         drawRoute(liveMapCanvas, runState.locations);
         updateUI();
     };
+
     const handleError = (error) => {
-        console.error("Geolocation error: ", error);
-        let message = "Could not get location. Please ensure location services are enabled and permissions are granted.";
-        let status = "Error";
+        let status = "Error", message = "Could not get location.";
         switch (error.code) {
-            case error.PERMISSION_DENIED:
-                status = "Permission Denied";
-                message = "Location permission denied. To fix this, go to your browser's settings, find this site, and allow location access.";
-                break;
-            case error.POSITION_UNAVAILABLE:
-                status = "Location Unavailable";
-                message = "Location information is unavailable. This might be due to a weak GPS signal. Try moving to an open area.";
-                break;
-            case error.TIMEOUT:
-                status = "Request Timed Out";
-                message = "The request to get user location timed out. Please try again with a stronger signal.";
-                break;
+            case error.PERMISSION_DENIED: status = "Permission Denied"; message = "Location permission denied."; break;
+            case error.POSITION_UNAVAILABLE: status = "Location Unavailable"; message = "Location information is unavailable."; break;
+            case error.TIMEOUT: status = "Request Timed Out"; message = "The request to get user location timed out."; break;
         }
         updateGpsStatus(status, null);
         alert(message);
         stopRun(false);
         showView('aiCoach');
     };
+
     const updateUI = () => {
         if (!runState.isRunning) return;
         const totalSeconds = Math.floor(runState.elapsedTime / 1000);
         const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
         const seconds = (totalSeconds % 60).toString().padStart(2, '0');
         liveTimeEl.textContent = `${minutes}:${seconds}`;
-        liveDistanceEl.innerHTML = `${(runState.distance / 1000).toFixed(2)}<span class="text-5xl ml-1">km</span>`;
+
+        const distanceInMiles = runState.distance / 1609.34;
+        liveDistanceEl.innerHTML = `${distanceInMiles.toFixed(2)}<span class="text-5xl ml-1">mi</span>`;
+
         if (runState.distance > 0) {
-            const pace = (runState.elapsedTime / 1000 / 60) / (runState.distance / 1000);
-            livePaceEl.innerHTML = `${Math.floor(pace)}:${Math.round((pace % 1) * 60).toString().padStart(2, '0')} <span class="text-lg font-medium text-gray-600">/km</span>`;
+            const paceInMinutesPerMile = (runState.elapsedTime / 1000 / 60) / distanceInMiles;
+            livePaceEl.innerHTML = `${Math.floor(paceInMinutesPerMile)}:${Math.round((paceInMinutesPerMile % 1) * 60).toString().padStart(2, '0')} <span class="text-lg font-medium text-gray-600">/mi</span>`;
         } else {
-            livePaceEl.innerHTML = `0:00 <span class="text-lg font-medium text-gray-600">/km</span>`;
+            livePaceEl.innerHTML = `0:00 <span class="text-lg font-medium text-gray-600">/mi</span>`;
         }
         const [pauseIcon, pauseText] = [pauseButton.children[0], pauseButton.children[1]];
         pauseIcon.textContent = runState.isPaused ? 'play_arrow' : 'pause';
         pauseText.textContent = runState.isPaused ? 'Resume' : 'Pause';
     };
+
     const calculateDistance = (loc1, loc2) => {
         const R = 6371e3;
         const φ1 = loc1.latitude * Math.PI / 180, φ2 = loc2.latitude * Math.PI / 180;
@@ -193,29 +252,21 @@ document.addEventListener('DOMContentLoaded', () => {
         return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     };
 
-    // --- DATA & HISTORY ---
     const saveRun = () => {
         try {
             const runData = { date: new Date().toISOString(), distance: runState.distance, duration: runState.elapsedTime, locations: runState.locations };
             allRuns.push(runData);
             localStorage.setItem('runs', JSON.stringify(allRuns));
-        } catch (e) {
-            console.error("Failed to save run:", e);
-            alert("Could not save your run. Local storage might be full or disabled.");
-        }
+        } catch (e) { console.error("Failed to save run:", e); }
     };
+
     const loadRuns = () => {
         try {
             const runsJSON = localStorage.getItem('runs');
-            if (runsJSON) {
-                allRuns = JSON.parse(runsJSON);
-            }
-        } catch (e) {
-            console.error("Failed to load runs:", e);
-            allRuns = [];
-            alert("Could not load your run history. Local storage might be disabled.");
-        }
+            if (runsJSON) allRuns = JSON.parse(runsJSON);
+        } catch (e) { console.error("Failed to load runs:", e); allRuns = []; }
     };
+
     const renderHistory = () => {
         historyListEl.innerHTML = '';
         if (allRuns.length === 0) { historyListEl.innerHTML = `<p class="text-center text-gray-500">No runs recorded yet.</p>`; return; }
@@ -227,12 +278,15 @@ document.addEventListener('DOMContentLoaded', () => {
             drawRoute(document.getElementById(`history-canvas-${index}`), run.locations);
         });
     };
+
     const drawRoute = (canvas, locations) => {
         if (!canvas || locations.length < 2) return;
         const ctx = canvas.getContext('2d'), { width, height } = canvas;
+        if (width === 0 || height === 0) return;
         const lats = locations.map(l => l.latitude), lons = locations.map(l => l.longitude);
         const minLat = Math.min(...lats), maxLat = Math.max(...lats), minLon = Math.min(...lons), maxLon = Math.max(...lons);
         const latRange = maxLat - minLat, lonRange = maxLon - minLon;
+        if (latRange === 0 || lonRange === 0) return;
         const scale = Math.min(width / lonRange, height / latRange) * 0.9;
         const xOffset = (width - lonRange * scale) / 2, yOffset = (height - latRange * scale) / 2;
         ctx.clearRect(0, 0, width, height);
@@ -247,7 +301,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ctx.stroke();
     };
 
-    // --- AI COACH & SUMMARY ---
     const updateSummaryView = () => {
         if (allRuns.length === 0) {
             summaryWelcomeEl.classList.remove('hidden');
@@ -255,18 +308,13 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             summaryWelcomeEl.classList.add('hidden');
             summaryMainEl.classList.remove('hidden');
-
             const lastRun = allRuns[allRuns.length - 1];
             const bestRun = allRuns.reduce((best, current) => (current.distance > best.distance) ? current : best, allRuns[0]);
-
-            summaryLastDistEl.innerHTML = `${formatDistance(lastRun.distance)}<span class="text-sm font-medium">km</span>`;
+            summaryLastDistEl.innerHTML = formatDistance(lastRun.distance);
             summaryLastTimeEl.textContent = formatTime(lastRun.duration);
-            summaryBestDistEl.innerHTML = `${formatDistance(bestRun.distance)}<span class="text-sm font-medium">km</span>`;
+            summaryBestDistEl.innerHTML = formatDistance(bestRun.distance);
             summaryBestTimeEl.textContent = formatTime(bestRun.duration);
-
             drawRoute(summaryMapCanvas, lastRun.locations);
-
-            // Placeholder for AI advice
             getAIAdvice(lastRun);
         }
     };
@@ -274,15 +322,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const getAIAdvice = async (run) => {
         aiAdviceTitleEl.textContent = "Analyzing your run...";
         aiAdviceBodyEl.textContent = "Please wait while we generate your personalized advice.";
-
         if (!geminiKey) {
             aiAdviceTitleEl.textContent = "Set your API Key";
             aiAdviceBodyEl.textContent = "Please add your Google Gemini API key in the settings below to get personalized advice.";
             return;
         }
-
-        // This is where the Gemini API call would go.
-        // For now, we'll just use a placeholder.
         setTimeout(() => {
             aiAdviceTitleEl.textContent = "Great job on your last run!";
             aiAdviceBodyEl.textContent = "This is placeholder advice. In a real app, we would call the Gemini API to get personalized feedback based on your run data.";
@@ -292,33 +336,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveApiKey = () => {
         geminiKey = geminiKeyInput.value;
         if (geminiKey) {
-            try {
-                localStorage.setItem('geminiApiKey', geminiKey);
-                alert('API Key saved!');
-            } catch (e) {
-                console.error("Failed to save API key:", e);
-                alert("Could not save API key. Local storage might be full or disabled.");
-            }
-        }
-    };
-    const loadApiKey = () => {
-        try {
-            const savedKey = localStorage.getItem('geminiApiKey');
-            if (savedKey) {
-                geminiKey = savedKey;
-                geminiKeyInput.value = savedKey;
-            }
-        } catch (e) {
-            console.error("Failed to load API key:", e);
-            alert("Could not load API key. Local storage might be disabled.");
+            try { localStorage.setItem('geminiApiKey', geminiKey); alert('API Key saved!'); }
+            catch (e) { console.error("Failed to save API key:", e); }
         }
     };
 
-    // --- INITIALIZATION ---
+    const loadApiKey = () => {
+        try {
+            const savedKey = localStorage.getItem('geminiApiKey');
+            if (savedKey) { geminiKey = savedKey; geminiKeyInput.value = savedKey; }
+        } catch (e) { console.error("Failed to load API key:", e); }
+    };
+
     pauseButton.addEventListener('click', togglePause);
     finishButton.addEventListener('click', () => {
         if (confirm('Are you sure you want to finish this run?')) {
-            stopRun(true); // Save the run
+            stopRun(true);
             showView('aiCoach');
         }
     });
